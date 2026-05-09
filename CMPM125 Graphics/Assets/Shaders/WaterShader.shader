@@ -62,13 +62,16 @@ Shader "Custom/WaterShader"
             {
                 Varyings o;
 
-                // Vertex displacement
+                // Two waves offset in frequency and phase
                 float wave1 = sin(v.positionOS.x * _WaveFrequency + _Time.y * _WaveSpeed) * _WaveHeight;
                 float wave2 = sin(v.positionOS.z * _WaveFrequency * 0.8 + _Time.y * _WaveSpeed * 1.3 + 1.5) * _WaveHeight * 0.6;
                 v.positionOS.y += wave1 + wave2;
 
+                // Transform to clip space
                 o.positionHCS = TransformObjectToHClip(v.positionOS.xyz);
+                // UVs for normal map scrolling
                 o.uv          = TRANSFORM_TEX(v.uv, _NormalMap);
+                // Transform normal to world space for lighting calculations
                 o.normalWS    = TransformObjectToWorldNormal(v.normalOS);
                 o.viewDirWS   = normalize(GetWorldSpaceViewDir(TransformObjectToWorld(v.positionOS.xyz)));
                 return o;
@@ -76,18 +79,22 @@ Shader "Custom/WaterShader"
 
             half4 frag(Varyings i) : SV_Target
             {
-                // Two scrolling normal map layers
+                // Scroll two layers of normals in different directions for more dynamic waves
                 float2 uv1 = i.uv + _Time.y * _NormalScrollSpeed.xy;
                 float2 uv2 = i.uv + _Time.y * _NormalScrollSpeed.xy * float2(-0.7, 1.2) + float2(0.4, 0.2);
 
+                // Sample and blend normals
                 float3 n1 = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv1));
                 float3 n2 = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv2));
+                // Blend the two normal samples together
                 float3 blendedNormal = normalize(n1 + n2);
 
                 // Fresnel
                 float fresnel = pow(1.0 - saturate(dot(blendedNormal, normalize(i.viewDirWS))), _FresnelPower);
 
+                // Blend between water color and foam color based on Fresnel term
                 half4 col = lerp(_WaterColor, _FoamColor, fresnel);
+                // Make foam more opaque at glancing angles
                 col.a = lerp(_WaterColor.a, 1.0, fresnel * 0.5);
                 return col;
             }
